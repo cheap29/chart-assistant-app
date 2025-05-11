@@ -1,84 +1,59 @@
 // src/libs/csvGenerator.ts
+// GPT API を使って純粋なCSVデータのみを生成するユーティリティ
+
 const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
 /**
- * GPTに仮想CSVデータを生成させる
- * @param prompt 元の自然文入力
- * @param metrics 選択した指標キーの配列
- * @param groupBy 選択した比較軸キーの配列
- * @param maxRows 生成する行数の上限（無料ユーザーは25行など）
- * @returns CSV文字列 or null
+ * ユーザーの要求に応じて純粋なCSV形式の文字列を生成します。
+ * - 説明文やコードブロック、余計な文章を一切含めず、CSVヘッダーとデータ行のみを返すこと。
+ * @param userInput ユーザーの自然文入力
+ * @param metrics 出力したい指標キーの配列 (例: ['count','avg_mag'])
+ * @param groups 比較軸キーの配列 (例: ['year','prefecture'])
+ * @param maxRows 最大行数 (無料ユーザー用に制限: デフォルト10)
+ * @returns CSVデータの文字列
  */
-export async function generateCSV(
-  prompt: string,
+export async function generateCsv(
+  userInput: string,
   metrics: string[],
-  groupBy: string[],
-  maxRows = 25
-): Promise<string | null> {
-  const systemPrompt = `
-あなたはデータアナリストです。以下の条件を厳守し、**純粋なCSVテキスト**（コードブロックや余計な説明文は一切含めない）で出力してください。
+  groups: string[],
+  maxRows = 10
+): Promise<string> {
+  // 日本語のプロンプトを明確に指定し、純粋なCSVのみを返すように誘導
+  const systemPrompt = `あなたはデータアナリストです。以下の条件を必ず守り、余計な説明文やコードブロックを一切含めず、CSVヘッダーとデータ行のみを出力してください。
+- カラム: ${[...groups, ...metrics].join(', ')}
+- 最大行数: ${maxRows}行
+- 出力形式: カンマ区切り、ヘッダー付き、純粋なCSVのみ
+`;
 
-【出力要件】
-1. ユーザー入力: ${prompt}
-2. 指標 (columns): ${metrics.join(',')}
-3. 比較軸 (groupBy): ${groupBy.join(',')}
-4. データ生成手順:
-   a. 指定の比較軸 (${groupBy.join(',')}) ごとにグループ化  
-   b. 数値指標は「合計」または「平均」のいずれかで集計  
-      - 量的な指標（CountやSumなど）は合計  
-      - 平均が意味を持つ指標（MagnitudeやDepthなど）は平均  
-   c. グループ化後の行数は最大${maxRows}行  
-   d. 行はグループキーの昇順でソート
-5. 列ヘッダーは「比較軸のキー名」と「指標のキー名」を**小文字**のスネークケース**で**出力  
-   （例: year, count, magnitude）
-6. 比較軸が日付や年月である場合は、YYYY-MM-DD または YYYY のフォーマットで  
-7. カテゴリ軸（地域や範囲）であれば、そのまま文字列キーとして出力
-8. コードブロックや注釈を一切含めないこと
-9. 列は必ずcolumnsとgroupByのキーのみで構成すること
-
-【出力例】  
-year,count,magnitude  
-2013,15,5.2  
-2014,20,5.6
-
-# 余分な説明文やマークダウンのコードブロックは一切含めないでください。
-# データのキーとなる部分は指標 (columns)と比較軸 (groupBy)にしてください。
-...
+  const userPrompt = `ユーザーのリクエスト: 「${userInput}」
+metrics: ${metrics.join(', ')}
+groups: ${groups.join(', ')}
+maxRows: ${maxRows}
+CSVのみを返してください。説明や装飾は不要です。
+データは大きい順に並べてください。
+年や月が横軸の場合は古い順から並べてください。
+期間の指定がない場合は過去3年で調査してください。
 `;
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: 'gpt-4-1106-preview',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt }
+        { role: 'user', content: userPrompt }
       ],
-      temperature: 0.7,
-      max_tokens: 1000,
+      temperature: 0.5,
+      max_tokens: 1500,
     }),
   });
 
-  if (!res.ok) {
-    console.error('generateCSV API Error', await res.text());
-    return null;
-  }
-
-  // レスポンス全体のJSONを取得
   const json = await res.json();
-  // content部だけ取り出し
-  let csv = json.choices?.[0]?.message?.content.trim() ?? '';
-  // 万が一コードブロックが混ざっていたら除去
-  if (csv.startsWith('```')) {
-    csv = csv
-      .replace(/^```(?:csv)?\s*/, '')
-      .replace(/```$/, '')
-      .trim();
-  }
-
-  return csv;
+  const csvText = json.choices?.[0]?.message?.content || '';
+  // 前後の空白やバッククォートを除去
+  return csvText.replace(/```/g, '').trim();
 }

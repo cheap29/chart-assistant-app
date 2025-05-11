@@ -1,154 +1,144 @@
-
 // src/components/ChartDisplay.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  ResponsiveContainer,
-  LineChart,
+  ComposedChart,
   Line,
-  BarChart,
   Bar,
-  ScatterChart,
-  Scatter,
   PieChart,
   Pie,
   Cell,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   Legend,
+  ResponsiveContainer,CartesianGrid, LabelList
 } from 'recharts';
+import AnalysisModal from '@/components/AnalysisModal';
+import { fetchChartAnalysis } from '@/libs/analysis';
 
-type ChartDisplayProps = {
+type ChartType = 'line' | 'bar' | 'pie';
+
+interface ChartDisplayProps {
   data: Record<string, any>[];
-  metrics: string[];
-  groupBy: string[];
-  type: 'line' | 'bar' | 'scatter' | 'pie';
-};
-
-export default function ChartDisplay({
-  data,
-  metrics,
-  groupBy,
-  type,
-}: ChartDisplayProps) {
-  if (!data.length || !metrics.length || !groupBy.length) return null;
-
-  // 全て小文字化した metrics と groupBy
-  const lcMetrics = metrics.map(k => k.toLowerCase());
-  const lcGroupBy = groupBy.map(k => k.toLowerCase());
-
-  // データ整形: キーを小文字に変換し、数値化 & 日付→year 変換
-  const normalizedData = data.map(row => {
-    const lower: Record<string, any> = {};
-    Object.entries(row).forEach(([origKey, value]) => {
-      const key = origKey.toLowerCase();
-      // 数値っぽい場合は Number 変換、そうでない場合はそのまま
-      lower[key] = !isNaN(Number(value)) ? Number(value) : value;
-    });
-    // 日付キーがある場合に year を追加
-    if (lower.date && !lower.year) {
-      lower.year = new Date(lower.date).getFullYear();
-    }
-    return lower;
-  });
-
-  // X 軸キーの自動判定 (groupBy -> year -> date の順)
-  const xCandidates = [...lcGroupBy, 'year', 'date'];
-  const xKey = xCandidates.find(k => normalizedData[0][k] !== undefined) as string;
-
-  // チャート用データ: X 軸と metrics の数値のみ
-  const chartData = normalizedData.map(row => {
-    const obj: any = { [xKey]: row[xKey] };
-    lcMetrics.forEach(key => {
-      obj[key] = row[key] !== undefined ? Number(row[key]) : 0;
-    });
-    return obj;
-  });
-
-  const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7f50', '#a4de6c'];
-
-  // 子要素を一つにまとめて変数に格納
-  let ChartElement: React.ReactElement;
-  switch (type) {
-    case 'bar':
-      ChartElement = (
-        <BarChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey={xKey} />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          {lcMetrics.map((key, i) => (
-            <Bar key={key} dataKey={key} fill={COLORS[i % COLORS.length]} />
-          ))}
-        </BarChart>
-      );
-      break;
-    case 'scatter':
-      ChartElement = (
-        <ScatterChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey={xKey} />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          {lcMetrics.map((key, i) => (
-            <Scatter
-              key={key}
-              name={key}
-              data={chartData}
-              dataKey={key}
-              fill={COLORS[i % COLORS.length]}
-            />
-          ))}
-        </ScatterChart>
-      );
-      break;
-    case 'pie':
-      ChartElement = (
-        <PieChart data={chartData}>
-          <Tooltip />
-          <Legend />
-          <Pie
-            data={chartData}
-            dataKey={lcMetrics[0]}
-            nameKey={xKey}
-            outerRadius={100}
-            label
-          >
-            {chartData.map((_, index) => (
-              <Cell key={index} fill={COLORS[index % COLORS.length]} />
-            ))}
-          </Pie>
-        </PieChart>
-      );
-      break;
-    default:
-      ChartElement = (
-        <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey={xKey} />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          {lcMetrics.map((key, i) => (
-            <Line
-              key={key}
-              dataKey={key}
-              stroke={COLORS[i % COLORS.length]}
-              dot={false}
-            />
-          ))}
-        </LineChart>
-      );
-  }
-
-  // ResponsiveContainer の子要素は単一 ReactElement
-  return (
-    <ResponsiveContainer width="100%" height={300}>
-      {ChartElement}
-    </ResponsiveContainer>
-  );
+  xKey: string;
+  yKeys: string[];
+  nameKey?: string;
 }
 
+export default function ChartDisplay({ data, xKey, yKeys, nameKey }: ChartDisplayProps) {
+  // 初期状態はすべて bar
+  const [types, setTypes] = useState<Record<string, ChartType>>(Object.fromEntries(
+    yKeys.map(k => [k, 'bar' as ChartType])
+  ));
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+
+  const allPie = yKeys.every(key => types[key] === 'pie');
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [analysisText, setAnalysisText] = useState('');
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+
+  const handleAnalysis = async () => {
+    setAnalysisLoading(true);
+    const text = await fetchChartAnalysis(data, xKey, yKeys);
+    setAnalysisText(text);
+    setAnalysisLoading(false);
+    setShowAnalysis(true);
+  };
+
+  
+  return (
+    <div className="chart-block mb-5">
+      {/* チャートタイプ選択 */}
+      <div className="mb-4 d-flex flex-wrap gap-3">
+        {yKeys.map((key, idx) => (
+          <div key={key}>
+            <label className="form-label me-2">{key}:</label>
+            <select
+              className="form-select d-inline-block w-auto"
+              value={types[key]}
+              onChange={e =>
+                setTypes(prev => ({ ...prev, [key]: e.target.value as ChartType }))
+              }
+            >
+              <option value="bar">棒グラフ</option>
+              <option value="line">折れ線</option>
+              <option value="pie">円グラフ</option>
+            </select>
+          </div>
+        ))}
+      </div>
+
+      <ResponsiveContainer width="100%" height={300}>
+        {!allPie ? (
+          <ComposedChart
+            data={data}
+            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+          >
+            {/* グリッド線を追加 */}
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey={xKey} />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            {yKeys.map((key, idx) =>
+              types[key] === 'line' ? (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  name={key}
+                  stroke={COLORS[idx % COLORS.length]}
+                  dot={{ r: 4 }}
+                >
+                  {/* 線上にポイントごとのラベルを表示 */}
+                  <LabelList dataKey={key} position="top" style={{ fontSize: 12, fill: '#333' }} />
+                </Line>
+              ) : (
+                <Bar
+                  key={key}
+                  dataKey={key}
+                  name={key}
+                  fill={COLORS[idx % COLORS.length]}
+                >
+                  <LabelList dataKey={key} position="top" style={{ fontSize: 12, fill: '#333' }} />
+                </Bar>
+              )
+            )}
+          </ComposedChart>
+        ) : (
+          <PieChart>
+            <Tooltip />
+            <Legend />
+            <Pie
+             data={data}
+             dataKey={yKeys[0]}
+             nameKey={nameKey}
+             cx="50%"
+             cy="50%"
+             outerRadius={100}
+             label
+           >
+             {data.map((_, idx) => (
+               <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+             ))}
+           </Pie>
+         </PieChart>
+        )}
+        <button
+          className="btn btn-outline-info mb-3"
+          onClick={handleAnalysis}
+          disabled={analysisLoading}
+        >
+          {analysisLoading ? '分析中…' : 'AIせんせいによる分析'}
+        </button>
+        <AnalysisModal
+          show={showAnalysis}
+          onClose={() => setShowAnalysis(false)}
+          title={`${xKey}＋${yKeys.join(', ')}`}
+          content={analysisText}
+        />
+      </ResponsiveContainer>
+    </div>
+  );
+}

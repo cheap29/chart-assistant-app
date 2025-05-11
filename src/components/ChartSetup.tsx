@@ -1,155 +1,127 @@
 // src/components/ChartSetup.tsx
-import  { useState, useEffect } from 'react';
-import { fetchChartOptions, ChartOptions } from '../libs/openai';
-import { generateCSV } from '../libs/csvGenerator';
-import * as Papa from 'papaparse';
-import ChartDisplay from './ChartDisplay';
+import React, { useState } from 'react';
+import { fetchChartOptions, ChartOptions } from '@/libs/openai';
+import { generateChartData } from '@/libs/chartGenerator';
+import SuggestionCards, { Suggestion } from './SuggestionCards';
+import ChartDisplay from '@/components/ChartDisplay';
 
 export default function ChartSetup() {
   const [input, setInput] = useState('');
-  const [options, setOptions] = useState<ChartOptions | null>(null);
-  const [metrics, setMetrics] = useState<string[]>([]);
-  const [groups, setGroups] = useState<string[]>([]);
-  const [parsedData, setParsedData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [chartType, setChartType] = useState<'line' | 'bar' | 'scatter' | 'pie'>('line');
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [step, setStep] = useState<'input' | 'suggestions' | 'detail'>('input');
 
+  // AIからの提案データ
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  // 選択された提案のID
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // 選択後のチャート結果（複数）
+  const [chartResults, setChartResults] = useState<{ suggestion: Suggestion; data: any[] }[]>([]);
+  const [loadingChart, setLoadingChart] = useState(false);
 
-  // GPT問い合わせ→options取得→初期選択
+  // Step1: 自然文から提案取得
   const handleAsk = async () => {
     if (!input.trim()) return;
-    setLoading(true);
+    setLoadingOptions(true);
     const res = await fetchChartOptions(input);
-    setLoading(false);
+    setLoadingOptions(false);
     if (res) {
-      setOptions(res);
-      setMetrics([res.metrics[0].key]);
-      setGroups([res.groupBy[0].key]);
+      // 指標×軸 の組み合わせを提案カードとして生成
+      const combos: Suggestion[] = [];
+      res.metrics.forEach(m => {
+        res.groupBy.forEach(g => {
+          combos.push({
+            id: `${m.key}-${g.key}`,
+            metrics: [m.key],
+            groupBy: [g.key],
+            title: `${m.label} の ${g.label} 推移`,
+          });
+        });
+      });
+      setSuggestions(combos.slice(0, 6));
+      setSelectedIds([]);
+      setChartResults([]);
+      setStep('suggestions');
     }
   };
 
-  // options/metrics/groupsが変わるたび自動でCSV生成＆パース
-  useEffect(() => {
-    const run = async () => {
-      if (!options || !metrics.length || !groups.length) return;
-      setLoading(true);
-      const csv = await generateCSV(input, metrics, groups, 25);
-      setLoading(false);
-      if (!csv) return;
-      const { data } = Papa.parse(csv, { header: true });
-      setParsedData(data as any[]);
-    };
-    run();
-  }, [options, metrics, groups]);
-
-  const toggleMetric = (key: string) =>
-    setMetrics(prev => (prev.includes(key) ? [] : [key]));
-  const toggleGroup = (key: string) =>
-    setGroups(prev => (prev.includes(key) ? [] : [key]));
+  // Step2: 選択提案で各チャート生成
+  const handleGenerateAll = async () => {
+    if (selectedIds.length === 0) return;
+    setLoadingChart(true);
+    const results: { suggestion: Suggestion; data: any[] }[] = [];
+    for (const id of selectedIds) {
+      const suggestion = suggestions.find(s => s.id === id);
+      if (suggestion) {
+        const data = await generateChartData(input, suggestion.metrics, suggestion.groupBy);
+        results.push({ suggestion, data });
+      }
+    }
+    setChartResults(results);
+    setLoadingChart(false);
+    setStep('detail');
+  };
 
   return (
-    <div className="container align-items-start justify-content-start">
-    <p>AIチャートアシスタントにいろんな質問をしてみましょう。<br/>いつ、どこ、何の状況を知りたいですか？</p>
-
-      <textarea
-        className="form-control mb-2"
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        placeholder="例：ここ10年の日本の地震状況を見せて"
-        rows={3}
-      />
-
-      <button
-        className="btn btn-primary mb-4"
-        onClick={handleAsk}
-        disabled={loading || !input.trim()}
-      >
-        {loading ? '読み込み中…' : 'GPTに問い合わせる'}
-      </button>
-
-      {options && (
+    <div className="container py-4">
+      {step === 'input' && (
         <>
-        <div className="d-flex gap-2">
+          <h1 className="mb-3">AIチャートアシスタント</h1>
           <div className="mb-3">
-            <h5>指標を選択</h5>
-            <div className="d-flex flex-wrap">
-              {options.metrics.map(opt => (
-                <button
-                  key={opt.key}
-                  className={`btn btn-sm me-2 mb-2 ${
-                    metrics.includes(opt.key)
-                      ? 'btn-primary'
-                      : 'btn-outline-secondary'
-                  }`}
-                  onClick={() => toggleMetric(opt.key)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            <textarea
+              className="form-control"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="例：ここ10年の日本の地震状況を見せて"
+              rows={3}
+            />
           </div>
-
-          <div className="mb-4">
-            <h5>比較軸を選択</h5>
-            <div className="d-flex flex-wrap">
-              {options.groupBy.map(opt => (
-                <button
-                  key={opt.key}
-                  className={`btn btn-sm me-2 mb-2 ${
-                    groups.includes(opt.key)
-                      ? 'btn-primary'
-                      : 'btn-outline-secondary'
-                  }`}
-                  onClick={() => toggleGroup(opt.key)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleAsk}
+            disabled={loadingOptions}
+          >
+            {loadingOptions ? '解析中…' : 'GPTにおまかせ'}
+          </button>
         </>
       )}
 
-     {/* ダッシュボードプレビュー */}
-     {parsedData.length > 0 && (
-       <div className="mb-3">
-         <h5>チャートタイプを選択</h5>
-         <select
-           className="form-select w-auto"
-           value={chartType}
-           onChange={(e) => setChartType(e.target.value as any)}
-         >
-           <option value="line">折れ線グラフ</option>
-           <option value="bar">棒グラフ</option>
-           <option value="scatter">散布図</option>
-           <option value="pie">円グラフ</option>
-         </select>
-       </div>
-     )}
-
-      {!!parsedData.length && (
+      {step === 'suggestions' && (
         <>
-          <h5 className="mb-3">ダッシュボードプレビュー</h5>
+          <h2 className="mb-3">AIからの提案 (複数選択可)</h2>
+          <SuggestionCards
+            suggestions={suggestions}
+            selectedIds={selectedIds}
+            onChange={setSelectedIds}
+          />
+          <button
+            className="btn btn-success mt-3"
+            onClick={handleGenerateAll}
+            disabled={loadingChart || selectedIds.length === 0}
+          >
+            {loadingChart ? '生成中…' : 'ダッシュボード生成'}
+          </button>
+          <button className="btn btn-secondary mt-3 ms-2" onClick={() => setStep('input')}>
+            戻る
+          </button>
+        </>
+      )}
+
+      {step === 'detail' && (
+        <>
+          <h2 className="mb-3">ダッシュボード結果</h2>
+          <button className="btn btn-secondary mb-3" onClick={() => setStep('suggestions')}>
+            ← 提案に戻る
+          </button>
           <div className="row">
-            {/* 1つ目：実際のチャート */}
-            <div className="col-md-6 mb-4">
-              <ChartDisplay
-               data={parsedData}
-               metrics={metrics}
-               groupBy={groups}
-               type={chartType}
-             />
-            </div>
-            {/* 残り4つはダミー枠 */}
-            {[2, 3, 4, 5].map(i => (
-              <div key={i} className="col-md-6 mb-4">
-                <div
-                  className="border rounded d-flex align-items-center justify-content-center text-muted"
-                  style={{ height: 300 }}
-                >
-                  ダミーチャート{i}
-                </div>
+            {chartResults.map(({ suggestion, data }) => (
+              <div key={suggestion.id} className="col-md-6 mb-4">
+                <h5>{suggestion.title}</h5>
+                <ChartDisplay
+                  data={data}
+                  xKey={suggestion.groupBy[0]}
+                  yKeys={suggestion.metrics}
+                  nameKey={suggestion.groupBy[0]}
+                />
               </div>
             ))}
           </div>
