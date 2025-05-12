@@ -69,7 +69,8 @@ export default function ChartDisplay({ data, xKey, yKeys, nameKey }: ChartDispla
         ))}
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={300}> 
+        
         {!allPie ? (
           <ComposedChart
             data={data}

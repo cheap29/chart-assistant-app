@@ -1,0 +1,14 @@
+/* src/index.css */
+.breadcrumb {
+    background: transparent;
+    padding: 0;
+    margin-bottom: 1rem;
+}
+.breadcrumb-item + .breadcrumb-item::before {
+    content: '›';
+}
+.breadcrumb .breadcrumb-item.active {
+    color: #b12f95;
+    font-weight: bold;
+}
+

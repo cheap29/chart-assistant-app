@@ -23,12 +23,6 @@ export default function App() {
           <div className="collapse navbar-collapse" id="mainNavbar">
             <ul className="navbar-nav me-auto mb-2 mb-lg-0">
               <li className="nav-item">
-                <a className="nav-link active" aria-current="page" href="#">ダッシュボード</a>
-              </li>
-              <li className="nav-item">
-                <a className="nav-link" href="#">設定</a>
-              </li>
-              <li className="nav-item">
                 <a className="nav-link" href="#">ヘルプ</a>
               </li>
             </ul>

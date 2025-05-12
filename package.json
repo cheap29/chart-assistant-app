@@ -12,10 +12,11 @@
   "dependencies": {
     "@chakra-ui/theme": "^3.4.6",
     "@popperjs/core": "^2.11.8",
-    "bootstrap": "^5.3.5",
+    "bootstrap": "^5.3.6",
     "openai": "^4.97.0",
     "papaparse": "^5.5.2",
     "react": "^19.0.0",
+    "react-bootstrap": "^2.10.10",
     "react-dom": "^19.0.0",
     "recharts": "^2.15.3"
   },
