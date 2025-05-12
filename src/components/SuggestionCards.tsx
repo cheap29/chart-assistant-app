@@ -41,7 +41,7 @@ export default function SuggestionCards({ suggestions, selectedIds, onChange }: 
                   className={`mt-auto btn ${isSelected ? 'btn-secondary' : 'btn-outline-primary'}`}
                   onClick={() => toggle(s.id)}
                 >
-                  {isSelected ? '解除選択' : '選択'}
+                  {isSelected ? '選択済' : '選択'}
                 </button>
               </div>
             </div>

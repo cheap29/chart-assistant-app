@@ -31,7 +31,13 @@ export async function generateChartData(
   if (errors.length) {
     console.warn('CSV parse errors:', errors);
   }
-
+  const invalid = data.some(row =>
+    metrics.some(m => !(m in row)) || groups.some(g => !(g in row))
+  );
+  if (invalid || data.length === 0) {
+    // 例外を投げて上流でキャッチ
+    throw new Error('可視化に必要なフィールドが含まれていません。');
+  }
   // 3. データ配列を返却
   return data;
 }
