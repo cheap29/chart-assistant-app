@@ -27,7 +27,9 @@ AI Chart Assistant は、ユーザーの自然言語入力から OpenAI GPT-4 �
 
 ### キャプチャ
 
-![image](https://github.com/user-attachments/assets/b2518b10-d23e-4963-9352-3cd1dc091c33)
+
+![image](https://github.com/user-attachments/assets/0efbbfdd-9133-48e9-a057-1b38c509b3f3)
+
 
 ![image](https://github.com/user-attachments/assets/8b6464e6-810a-48af-b5f7-8b439898b330)
 
