@@ -1,5 +1,7 @@
 # AI Chart Assistant
 
+> データがなくても、知りたい傾向を自然言語で入力するだけでAIがデータを生成してグラフ化します。
+
 AI Chart Assistant は、ユーザーの自然言語入力から OpenAI GPT-4 を使って仮想 CSV データを生成し、Bootstrap と Recharts を組み合わせた直感的なダッシュボード形式で可視化する Web アプリです。
 
 ## 🚀 主な機能
